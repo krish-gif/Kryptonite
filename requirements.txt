@@ -1,0 +1,8 @@
+# Sea-Ice NetCDF Preprocessing & PyTorch Training Pipeline Dependencies
+xarray>=2024.1.0
+netCDF4>=1.6.5
+numpy>=1.24.0
+pandas>=2.0.0
+cftime>=1.6.0
+pytest>=8.0.0
+torch>=2.0.0
