@@ -1,0 +1,27 @@
+# Raw NetCDF data (too large for GitHub)
+data/
+
+# Cached PyTorch tensors (too large for GitHub)
+cache/
+
+# Visual check output
+visual_check.png
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Environment
+.env
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
