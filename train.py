@@ -349,6 +349,12 @@ def train_model(
 
 
 if __name__ == "__main__":
+    import sys, io
+    # Fix Windows cp1252 terminal: reconfigure stdout to UTF-8 so Unicode
+    # checkmarks (✓) and box-drawing chars (─) print without UnicodeEncodeError.
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
     from pathlib import Path
     from data_pipeline import SeaIceDataPipeline
     from torch_dataset import create_dataloaders
@@ -452,7 +458,9 @@ if __name__ == "__main__":
         in_channels=7, out_channels=1, base_filters=32, depth=4,
         land_mask=land_mask_tensor,
     )
-    # patience=1, num_epochs=10 -> should stop at epoch 2 (1 baseline + 1 non-improvement)
+    # Use lr=50.0 (intentionally destructive) to guarantee model diverges after epoch 1,
+    # so val_loss does NOT improve at epoch 2, triggering early stopping immediately.
+    # patience=1 -> at most 2 epochs: epoch 1 sets baseline, epoch 2 shows no improvement -> halt.
     history_es = train_model(
         model=model_es,
         train_loader=train_loader,
@@ -460,14 +468,14 @@ if __name__ == "__main__":
         criterion=criterion,
         land_mask=land_mask_tensor,
         num_epochs=10,
-        lr=1e-3,
+        lr=50.0,        # Intentionally large: forces gradient explosion -> val_loss diverges
         patience=1,
         checkpoint_dir="checkpoints_es/",
         seed=42,
     )
-    print(f"Total epochs run: {len(history_es)} (should be <= 2)")
-    assert len(history_es) <= 2, f"Expected <= 2 epochs with patience=1, got {len(history_es)}"
-    print("Early stopping halted correctly ✓")
+    print(f"Total epochs run: {len(history_es)} (should be <= 2 with patience=1 and diverging lr)")
+    assert len(history_es) <= 2, f"Expected <= 2 epochs with patience=1 + diverging lr, got {len(history_es)}"
+    print("Early stopping halted correctly \u2713")
 
     # ── Test 4: LR decay from scheduler ──
     print("\n--- Test 4: Learning rate decay across epochs ---")
