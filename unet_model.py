@@ -324,6 +324,93 @@ class SeaIceUNet(nn.Module):
 
         return output
 
+    def forward_checkpointed(self, x: torch.Tensor) -> torch.Tensor:
+        """Memory-efficient forward pass using gradient checkpointing.
+
+        Applies ``torch.utils.checkpoint.checkpoint`` to the bottleneck and
+        every decoder up-block — the activation-heavy parts of the U-Net.  The
+        encoder path (inc + down_blocks) is left uncheckpointed because its
+        skip-connection tensors must remain materialised for the decoder to
+        read from.
+
+        This method is called exclusively by ``local_train.py`` when
+        ``LocalTrainConfig.use_grad_checkpoint = True``.  It is **never**
+        called by the existing ``train.py`` / Lightning AI path — those
+        continue to call ``forward()`` as before.
+
+        Gradient checkpointing trades additional forward re-computation during
+        the backward pass for a significant reduction in peak VRAM usage, which
+        is critical for fitting the model on a 6 GB laptop GPU.
+
+        Args:
+            x: Input tensor of shape (Batch, in_channels, Height, Width).
+
+        Returns:
+            Output prediction of shape (Batch, out_channels, Height, Width)
+            in [0.0, 1.0], identical to ``forward()``.
+        """
+        import torch.utils.checkpoint as torch_ckpt
+
+        if x.ndim != 4:
+            raise ValueError(
+                f"Expected 4D input tensor (Batch, Channels, Height, Width), "
+                f"but got shape {x.shape}"
+            )
+        if x.shape[1] != self.in_channels:
+            raise ValueError(
+                f"Input channel count mismatch: model expected {self.in_channels} "
+                f"channels, but received input with {x.shape[1]} channels."
+            )
+
+        # ── Encoder (not checkpointed — skips must stay alive for decoder) ──
+        skips: list[torch.Tensor] = []
+        x1 = self.inc(x)
+        skips.append(x1)
+
+        curr = x1
+        for down in self.down_blocks:
+            curr = down(curr)
+            skips.append(curr)
+
+        # ── Bottleneck (checkpointed) ────────────────────────────────────────
+        # checkpoint() requires inputs that require grad; pool output may not
+        # have requires_grad=True in eval mode, so we gate on torch.is_grad_enabled.
+        b_down = self.bottleneck_pool(curr)
+
+        def _run_bottleneck(inp: torch.Tensor) -> torch.Tensor:
+            return self.bottleneck(inp)
+
+        b_feat = torch_ckpt.checkpoint(_run_bottleneck, b_down, use_reentrant=False)
+
+        # ── Decoder (each up-block checkpointed) ─────────────────────────────
+        curr = b_feat
+        for up_block in self.up_blocks:
+            skip_feat = skips.pop()
+
+            # closure captures up_block and skip_feat by reference
+            def _run_up(inp: torch.Tensor, _up=up_block, _skip=skip_feat) -> torch.Tensor:
+                return _up(inp, _skip)
+
+            curr = torch_ckpt.checkpoint(_run_up, curr, use_reentrant=False)
+
+        # ── Output head + land mask (same as forward()) ───────────────────────
+        logits_sigmoid = self.outc(curr)
+
+        if self.land_mask is not None:
+            if self.land_mask.shape[-2:] != logits_sigmoid.shape[-2:]:
+                mask = F.interpolate(
+                    self.land_mask,
+                    size=logits_sigmoid.shape[-2:],
+                    mode="nearest",
+                )
+            else:
+                mask = self.land_mask
+            output = logits_sigmoid * mask
+        else:
+            output = logits_sigmoid
+
+        return output
+
 
 if __name__ == "__main__":
     from pathlib import Path

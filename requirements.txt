@@ -6,3 +6,8 @@ pandas>=2.0.0
 cftime>=1.6.0
 pytest>=8.0.0
 torch>=2.0.0
+
+# Forecast export (predict.py)
+Pillow>=10.0.0          # PNG rendering
+matplotlib>=3.8.0       # Colormapped RGBA image generation
+pyproj>=3.6.0           # CRS reprojection (WGS-84 ↔ polar stereographic for real data)
