@@ -526,6 +526,9 @@ def _parse_args() -> argparse.Namespace:
 def _find_checkpoint(repo_root: Path) -> Path | None:
     """Search standard checkpoint directories for a saved model file."""
     candidates = [
+        repo_root / "model_final.pt",
+        repo_root / "model_final.onnx",
+        repo_root / "checkpoints" / "model_final.pt",
         repo_root / "checkpoints_es" / "best_model.pt",
         repo_root / "checkpoints_test" / "best_model.pt",
         repo_root / "checkpoints_es" / "last_model.pt",
