@@ -1,61 +1,57 @@
 /**
- * api.js — Kryptonite Navigation Engine API Client
- *
- * All FastAPI calls go through here. Centralised so endpoint URLs
- * and payload shape are defined in exactly one place.
+ * api.js — Kryptonite Navigation Engine · FastAPI Client
  */
-
 import axios from 'axios'
 
 const BASE = 'http://localhost:8000'
 
-/** @typedef {{ lat: number, lon: number, label: string }} Waypoint */
+export async function getIceGrid(horizon = 24, signal) {
+  const { data } = await axios.get(`${BASE}/api/ice-grid`, {
+    params: { horizon },
+    signal,
+    timeout: 30_000,
+  })
+  return data // GeoJSON FeatureCollection
+}
 
-/**
- * Calculate optimal maritime route via A* + ConvLSTM safety corridors.
- *
- * @param {{
- *   start:        Waypoint,
- *   end:          Waypoint,
- *   forecastWindow: 0 | 24 | 48 | 72,
- *   safetyWeight: number,   // 0 = max fuel efficiency, 100 = max safety
- * }} payload
- * @returns {Promise<RouteResult>}
- */
-export async function calculateRoute(payload, signal) {
-  const { data } = await axios.post(
-    `${BASE}/api/calculate-route`,
-    {
-      start:           payload.start,
-      end:             payload.end,
-      forecast_window: payload.forecastWindow,
-      safety_weight:   payload.safetyWeight / 100,   // normalise 0–1 for backend
-    },
-    { signal, timeout: 30_000 },
-  )
+export async function getForecast(signal) {
+  const { data } = await axios.get(`${BASE}/api/forecast`, {
+    signal,
+    timeout: 30_000,
+  })
   return data
 }
 
-/**
- * Fetch current ice concentration grid (GeoJSON FeatureCollection).
- * Used to render the dynamic safety-corridor polygons.
- */
-export async function fetchIceGrid(forecastWindow = 0, signal) {
-  const { data } = await axios.get(`${BASE}/api/ice-grid`, {
-    params: { window: forecastWindow },
+export async function calculateRoute(params, signal) {
+  const fw = [24, 48, 72].includes(params.forecastWindow) ? params.forecastWindow : 72
+  const safetyWeight = Number(((params.safetyWeight / 100) * 10).toFixed(2))
+
+  const payload = {
+    start_coords:    [params.start.lat, params.start.lon],
+    end_coords:      [params.end.lat,   params.end.lon],
+    forecast_window: fw,
+    safety_weight:   safetyWeight,
+  }
+
+  const { data } = await axios.post(`${BASE}/api/calculate-route`, payload, {
+    signal,
+    timeout: 45_000,
+  })
+  return data
+}
+
+export async function getHealth(signal) {
+  const { data } = await axios.get(`${BASE}/api/health`, {
+    signal,
+    timeout: 5_000,
+  })
+  return data
+}
+
+export async function getEnvironmentalVectors(signal) {
+  const { data } = await axios.get(`${BASE}/api/environmental-vectors`, {
     signal,
     timeout: 15_000,
   })
-  return data
-}
-
-/**
- * Fetch iceberg positions as a GeoJSON FeatureCollection of Points.
- */
-export async function fetchIcebergs(signal) {
-  const { data } = await axios.get(`${BASE}/api/icebergs`, {
-    signal,
-    timeout: 10_000,
-  })
-  return data
+  return data // GeoJSON FeatureCollection of vector arrows
 }

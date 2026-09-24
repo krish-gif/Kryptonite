@@ -1,233 +1,197 @@
-/**
- * ControlPanel — Captain's Command Sidebar (right panel).
- *
- * Contains:
- *   • Route Configuration (departure / destination inputs)
- *   • Forecast Window selector
- *   • Tactical Safety/Fuel slider
- *   • CALCULATE OPTIMAL ROUTE action button
- */
+import { useState, useEffect } from 'react'
+import { MapPin, Crosshair, Clock, Shield, ChevronDown } from 'lucide-react'
 
-import { useState } from 'react'
-
-const PRESETS = {
-  departure: [
-    { label: 'Cape Town, ZA',     lat: -33.9, lon: 18.4  },
-    { label: 'Port Elizabeth, ZA', lat: -33.9, lon: 25.5  },
-    { label: 'Hobart, AU',         lat: -42.9, lon: 147.3 },
-  ],
-  destination: [
-    { label: 'Maitri Station',    lat: -70.8, lon: 11.7  },
-    { label: 'Bharati Station',   lat: -69.4, lon: 76.2  },
-    { label: 'McMurdo Station',   lat: -77.8, lon: 166.7 },
-  ],
-}
-
-const FORECAST_OPTIONS = [
-  { label: 'CURRENT',  value: 0  },
-  { label: '+24H',     value: 24 },
-  { label: '+48H',     value: 48 },
-  { label: '+72H',     value: 72 },
+// Expanded list of departure ports
+const START_POINTS = [
+  { id: 'cpt',  label: 'Cape Town, ZA',       lat: -33.9249, lon:  18.4241 },
+  { id: 'hbt',  label: 'Hobart, AU',           lat: -42.8821, lon: 147.3272 },
+  { id: 'fkl',  label: 'Stanley, Falklands',   lat: -51.6938, lon: -57.8594 },
+  { id: 'bue',  label: 'Ushuaia, Argentina',   lat: -54.8000, lon: -68.3000 },
+  { id: 'chr',  label: 'Christchurch, NZ',     lat: -43.5321, lon: 172.6362 },
+  { id: 'mau',  label: 'Port-aux-Français, FR',lat: -49.3526, lon:  70.2194 },
 ]
 
-// ── Small icon helpers ─────────────────────────────────────────
-function IconAnchor() {
+// Expanded list of Antarctic destinations
+const STATIONS = [
+  { id: 'maitri',       label: 'Maitri (IND)',           lat: -70.7600, lon:  11.4400 },
+  { id: 'bharati',      label: 'Bharati (IND)',           lat: -69.4000, lon:  76.1900 },
+  { id: 'sanae',        label: 'SANAE IV (ZA)',           lat: -71.6730, lon:   2.8430 },
+  { id: 'novolaz',      label: 'Novolazarevskaya (RU)',   lat: -70.7682, lon:  11.8323 },
+  { id: 'syowa',        label: 'Syowa (JA)',              lat: -69.0069, lon:  39.5897 },
+  { id: 'mawson',       label: 'Mawson (AU)',             lat: -67.6031, lon:  62.8728 },
+  { id: 'davis',        label: 'Davis (AU)',               lat: -68.5770, lon:  77.9680 },
+  { id: 'princess',     label: 'Princess Elizabeth (BE)', lat: -71.9500, lon:  23.3470 },
+]
+
+function Select({ label, value, onChange, options, disabled }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="21"/>
-      <path d="M5 15l7 6 7-6"/>
-    </svg>
-  )
-}
-function IconTarget() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
-      <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
-      <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
-    </svg>
-  )
-}
-function IconClock() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
-  )
-}
-function IconSliders() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
-      <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
-      <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
-      <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>
-      <line x1="17" y1="16" x2="23" y2="16"/>
-    </svg>
+    <div className="relative">
+      <label className="block font-mono text-[9px] text-slate-500 tracking-widest uppercase mb-1">{label}</label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={e => onChange(Number(e.target.value))}
+          disabled={disabled}
+          className="w-full bg-ocean-950 border border-sonar-500/25 rounded px-2 py-1.5
+                     font-mono text-xs text-slate-200 outline-none focus:border-sonar-500/60
+                     focus:ring-1 focus:ring-sonar-500/20 transition-all appearance-none pr-7
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {options.map((opt, i) => (
+            <option key={opt.id} value={i}>{opt.label}</option>
+          ))}
+        </select>
+        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+      </div>
+    </div>
   )
 }
 
-export default function ControlPanel({ onCalculate, loading }) {
-  const [departure,       setDeparture]       = useState(PRESETS.departure[0])
-  const [destination,     setDestination]     = useState(PRESETS.destination[0])
-  const [forecastWindow,  setForecastWindow]  = useState(24)
-  const [safetyWeight,    setSafetyWeight]    = useState(50)
+export default function ControlPanel({ onCalculate, loading, customPoints = [], onClearPoints }) {
+  const [startIdx, setStartIdx] = useState(0)
+  const [endIdx,   setEndIdx]   = useState(0)
+  const [horizon,  setHorizon]  = useState(48)
+  const [safety,   setSafety]   = useState(50)
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onCalculate({
-      start:          { lat: departure.lat,    lon: departure.lon,    label: departure.label },
-      end:            { lat: destination.lat,  lon: destination.lon,  label: destination.label },
-      forecastWindow,
-      safetyWeight,
-    })
+  const useCustomStart = customPoints.length > 0
+  const useCustomEnd   = customPoints.length > 1
+
+  const handleCalc = () => {
+    const start = useCustomStart
+      ? { lat: customPoints[0][1], lon: customPoints[0][0] }
+      : START_POINTS[startIdx]
+    const end = useCustomEnd
+      ? { lat: customPoints[1][1], lon: customPoints[1][0] }
+      : STATIONS[endIdx]
+    onCalculate({ start, end, forecastWindow: horizon, safetyWeight: safety })
   }
 
-  // Safety weight label
-  const weightLabel =
-    safetyWeight < 30 ? 'FUEL OPTIMAL'
-    : safetyWeight > 70 ? 'MAX SAFETY'
-    : 'BALANCED'
+  const safetyLabel = safety < 20 ? 'AGGRESSIVE' : safety < 50 ? 'MODERATE' : safety < 80 ? 'CAUTIOUS' : 'MAX SAFE'
+  const safetyColor = safety < 20 ? 'text-rose-400' : safety < 50 ? 'text-amber-400' : safety < 80 ? 'text-cyan-400' : 'text-radar-400'
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-4 h-full overflow-y-auto"
-      id="kns-control-panel"
-    >
+    <div className="panel-card p-3 flex flex-col gap-3">
+      <div className="section-header">
+        <Crosshair size={11} />
+        Route Configuration
+      </div>
 
-      {/* ── Route Configuration ──────────────────────────── */}
-      <div className="panel-card p-4">
-        <div className="section-header">
-          <IconAnchor />
-          Route Configuration
+      {/* Departure Point */}
+      <div>
+        <div className="flex justify-between items-center mb-1">
+          <label className="font-mono text-[9px] text-slate-500 tracking-widest uppercase">Departure Port</label>
+          {useCustomStart && (
+            <button onClick={onClearPoints} className="font-mono text-[8px] text-hazard-400 hover:text-hazard-300 flex items-center gap-0.5">
+              ✕ CLEAR CUSTOM
+            </button>
+          )}
         </div>
-
-        {/* Departure */}
-        <div className="mb-3">
-          <label className="telem-label block mb-1.5">Departure Point</label>
-          <select
-            className="nav-input"
-            value={departure.label}
-            onChange={(e) => {
-              const p = PRESETS.departure.find(x => x.label === e.target.value)
-              if (p) setDeparture(p)
-            }}
-          >
-            {PRESETS.departure.map(p => (
-              <option key={p.label} value={p.label}>{p.label}</option>
-            ))}
-          </select>
-          <div className="mt-1 font-mono text-[10px] text-slate-600">
-            {departure.lat.toFixed(2)}°S · {departure.lon.toFixed(2)}°E
+        {useCustomStart ? (
+          <div className="w-full bg-ocean-950 border border-radar-500/50 rounded px-2 py-1.5 font-mono text-xs text-radar-400 flex items-center gap-1.5">
+            <MapPin size={10} className="flex-none" />
+            <span>Map: {customPoints[0][1].toFixed(3)}°, {customPoints[0][0].toFixed(3)}°</span>
           </div>
+        ) : (
+          <Select
+            label=""
+            value={startIdx}
+            onChange={setStartIdx}
+            options={START_POINTS}
+          />
+        )}
+      </div>
+
+      {/* Destination */}
+      <div>
+        <label className="block font-mono text-[9px] text-slate-500 tracking-widest uppercase mb-1">Antarctic Destination</label>
+        {useCustomEnd ? (
+          <div className="w-full bg-ocean-950 border border-sonar-500/50 rounded px-2 py-1.5 font-mono text-xs text-sonar-400 flex items-center gap-1.5">
+            <MapPin size={10} className="flex-none" />
+            <span>Map: {customPoints[1][1].toFixed(3)}°, {customPoints[1][0].toFixed(3)}°</span>
+          </div>
+        ) : (
+          <Select
+            label=""
+            value={endIdx}
+            onChange={setEndIdx}
+            options={STATIONS}
+          />
+        )}
+      </div>
+
+      {/* Map Click Hint */}
+      <div className="text-center font-mono text-[9px] text-slate-700 py-1 border border-dashed border-slate-800 rounded">
+        or click map to set custom start/destination
+      </div>
+
+      {/* Safety Weight Slider */}
+      <div>
+        <div className="flex justify-between items-center mb-1">
+          <label className="font-mono text-[9px] text-slate-500 tracking-widest uppercase flex items-center gap-1">
+            <Shield size={9} />
+            Safety Weight
+          </label>
+          <span className={`font-mono text-[9px] font-bold ${safetyColor}`}>{safety}% · {safetyLabel}</span>
         </div>
-
-        {/* Destination */}
-        <div>
-          <label className="telem-label block mb-1.5">Destination</label>
-          <select
-            className="nav-input"
-            value={destination.label}
-            onChange={(e) => {
-              const p = PRESETS.destination.find(x => x.label === e.target.value)
-              if (p) setDestination(p)
-            }}
-          >
-            {PRESETS.destination.map(p => (
-              <option key={p.label} value={p.label}>{p.label}</option>
-            ))}
-          </select>
-          <div className="mt-1 font-mono text-[10px] text-slate-600">
-            {Math.abs(destination.lat).toFixed(2)}°S · {destination.lon.toFixed(2)}°E
-          </div>
+        <input
+          type="range"
+          min="0" max="100"
+          value={safety}
+          onChange={e => setSafety(Number(e.target.value))}
+          className="w-full accent-sonar-500 h-1.5 rounded-full"
+        />
+        <div className="flex justify-between mt-0.5">
+          <span className="font-mono text-[8px] text-rose-500/60">Aggressive</span>
+          <span className="font-mono text-[8px] text-radar-500/60">Max Safe</span>
         </div>
       </div>
 
-      {/* ── Forecast Window ──────────────────────────────── */}
-      <div className="panel-card p-4">
-        <div className="section-header">
-          <IconClock />
-          ConvLSTM Forecast Window
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {FORECAST_OPTIONS.map(opt => (
+      {/* ConvLSTM Forecast Horizon */}
+      <div>
+        <label className="block font-mono text-[9px] text-slate-500 tracking-widest uppercase mb-1 flex items-center gap-1">
+          <Clock size={9} />
+          ConvLSTM Horizon
+        </label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[24, 48, 72].map(h => (
             <button
-              key={opt.value}
+              key={h}
               type="button"
-              onClick={() => setForecastWindow(opt.value)}
-              className={`py-2 rounded font-mono text-xs font-semibold tracking-wider transition-all duration-200
-                ${forecastWindow === opt.value
-                  ? 'bg-sonar-500/20 border border-sonar-500/60 text-sonar-400 text-glow-sonar'
-                  : 'bg-ocean-900 border border-ocean-600 text-slate-500 hover:border-sonar-500/30 hover:text-slate-400'
-                }`}
+              onClick={() => setHorizon(h)}
+              className={`py-1.5 rounded font-mono text-xs font-semibold transition-all duration-150 ${
+                horizon === h
+                  ? 'bg-sonar-500/20 border border-sonar-500/60 text-sonar-400 shadow-sm'
+                  : 'bg-ocean-950 border border-ocean-600 text-slate-500 hover:border-sonar-500/30 hover:text-slate-300'
+              }`}
             >
-              {opt.label}
+              +{h}H
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Tactical Slider ──────────────────────────────── */}
-      <div className="panel-card p-4">
-        <div className="section-header">
-          <IconSliders />
-          Algorithm Weight
-        </div>
-
-        <div className="flex justify-between items-center mb-2">
-          <span className="font-mono text-[10px] text-hazard-400">⚡ FUEL EFF.</span>
-          <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded tracking-wider
-            ${safetyWeight > 70 ? 'text-radar-400 bg-radar-500/10' :
-              safetyWeight < 30 ? 'text-hazard-400 bg-hazard-500/10' :
-              'text-caution-400 bg-caution-500/10'}`}>
-            {weightLabel}
-          </span>
-          <span className="font-mono text-[10px] text-radar-400">🛡 MAX SAFE</span>
-        </div>
-
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={safetyWeight}
-          onChange={(e) => setSafetyWeight(Number(e.target.value))}
-          className="tactical-slider"
-          aria-label="Safety vs Fuel Efficiency weight"
-        />
-
-        <div className="mt-2 flex justify-center">
-          <span className="font-mono text-xs text-slate-500">
-            Safety weight: <span className="text-sonar-400">{safetyWeight}%</span>
-          </span>
-        </div>
-      </div>
-
-      {/* ── Action Button ─────────────────────────────────── */}
+      {/* Calculate CTA */}
       <button
-        type="submit"
+        type="button"
+        onClick={handleCalc}
         disabled={loading}
-        className="btn-calculate"
-        id="kns-calculate-btn"
+        className="mt-1 w-full py-2.5 rounded font-bold font-mono text-xs tracking-widest
+                   transition-all duration-300 relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed
+                   bg-gradient-to-r from-ocean-900 to-slate-900
+                   border border-radar-500/40 text-radar-400
+                   hover:border-radar-500/70 hover:shadow-lg hover:shadow-radar-500/10
+                   active:scale-[0.98]"
       >
-        {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
-            </svg>
-            COMPUTING A* PATH…
-          </span>
-        ) : (
-          '⌖ CALCULATE OPTIMAL ROUTE'
-        )}
+        <span className="relative z-10">
+          {loading ? '⟳ COMPUTING 3 CORRIDORS…' : '⚡ CALCULATE OPTIMAL ROUTE'}
+        </span>
       </button>
 
-      {/* ── Waypoints summary ─────────────────────────────── */}
-      <div className="font-mono text-[10px] text-slate-600 text-center">
-        <span className="text-sonar-500/60">{departure.label}</span>
-        <span className="mx-2">→</span>
-        <span className="text-radar-500/60">{destination.label}</span>
-      </div>
-    </form>
+      {!loading && (
+        <p className="font-mono text-[8px] text-slate-700 text-center leading-relaxed -mt-1">
+          Computes Cautious · Optimal · Aggressive corridors simultaneously
+        </p>
+      )}
+    </div>
   )
 }
